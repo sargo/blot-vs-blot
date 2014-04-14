@@ -1,7 +1,13 @@
 blot vs. blot
 =============
 
-HTML5 canvas strategic game
+Simple HTML5 canvas strategic game.
+
+
+Demo
+----
+
+http://sargo.github.io/blot-vs-blot/
 
 
 Author
