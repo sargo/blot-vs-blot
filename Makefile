@@ -14,8 +14,10 @@ help:
 	@echo '                                                                       '
 
 html:
+	mkdir -p $(OUTPUTDIR)
 	cp $(INPUTDIR)/html/*.html $(OUTPUTDIR)
 	mkdir -p $(OUTPUTDIR)/js
+	cp $(INPUTDIR)/javascript/*.js $(OUTPUTDIR)/js
 	/opt/nodejs/bin/coffee --compile --output $(OUTPUTDIR)/js $(INPUTDIR)/coffeescript
 
 clean:
