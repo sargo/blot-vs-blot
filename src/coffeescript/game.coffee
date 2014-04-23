@@ -7,6 +7,28 @@ PLAYER_C = 3
 PLAYER_D = 4
 
 
+pointInPoly = (point, poly) ->
+    # http://stackoverflow.com/a/19100419/2342911
+    inside = false
+    x = point.x
+    y = point.y
+
+    vertex = poly[ poly.length - 1 ]
+    x1 = vertex.x
+    y1 = vertex.y
+
+    for vertex in poly
+        x2 = vertex.x
+        y2 = vertex.y
+        if ( y1 < y ) != ( y2 < y )
+            if x1 + ( y - y1 ) / ( y2 - y1 ) * ( x2 - x1 ) < x
+                inside = not inside
+        x1 = x2
+        y1 = y2
+
+    return inside
+
+
 shuffle = (a) ->
     # http://coffeescriptcookbook.com/chapters/arrays/shuffling-array-elements
     for i in [a.length-1..1]
@@ -25,27 +47,28 @@ class FieldWidget
 
     #        empty       player A,  player B,  Player C,  Player D
     #        gray        blue       red        green      yellow
-    colors: ['#cccccc', '#0099ff', '#cc0033', '#009900', '#ffff66']
+    colors: ['#7f8c8d', '#3498db', '#c0392b', '#2ecc71', '#d35400']
 
     constructor: (field) ->
         @group = new Kinetic.Group
 
-        @circle = new Kinetic.Circle {
-            x: 0,
-            y: 0,
-            radius: 30,
-            fill: @colors[field.owner],
-        }
-        @label = new Kinetic.Text {
-            x: 0,
-            y: 0,
-            text: field.value,
-            align: 'center',
-            fontSize: 20,
-            fontFamily: 'Calibri',
-            fill: '#333333',
+        @circle = new Kinetic.Circle
+            x: 0
+            y: 0
+            radius: 30
+            fill: @colors[field.owner]
 
-        }
+        @label = new Kinetic.Text
+            x: 0
+            y: 0
+            text: field.value
+            align: 'center'
+            fontSize: 32
+            fontFamily: 'Calibri'
+            fontStyle: 'bold'
+            fill: '#2c3e50'
+
+
         @centerLabel()
 
         @group.add @circle
@@ -122,7 +145,7 @@ class Board
             @fields[0][@size-1].setOwner(PLAYER_D)
 
     getInitialFieldValue: (a, b, size) ->
-        if (a+b < size) then ((a+b)*200+100) else ((2*(size-1)-a-b)*200+100)
+        if (a+b < size) then ((a+b)*2+1) else ((2*(size-1)-a-b)*2+1)
 
     getNearFields: (field) ->
         # get neighbours of a fields, check bounds of board
@@ -170,7 +193,7 @@ class Board
         for x in [0..@size-1]
             for y in [0..@size-1]
                 field = @fields[x][y]
-                if field.owner != EMPTY and field.id not in visited
+                if field.id not in visited
                     blot = @getBlot field
                     blots.push blot
                     for blotMember in blot
@@ -187,8 +210,7 @@ class BlotWidget
     shape: null
 
     #        empty       player A,  player B,  Player C,  Player D
-    #        gray        blue       red        green      yellow
-    colors: ['#333333', '#0073bf', '#8c0023', '#005900', '#bfbf4d']
+    colors: ['#95a5a6', '#2980b9', '#e74c3c', '#27ae60', '#e67e22']
 
     move: (x, y) ->
         # to move widget to absolute position we have to calculate relative position
@@ -201,7 +223,7 @@ class BlotWidget
         # always scale with ration=1 (the same in both dimensions)
         @group.scale {x: scale, y: scale}
 
-    getEdge: (field, mode) ->
+    getEdge: (field, mode, padding) ->
         # get coordinates of field edge
         #
         #   /----------\
@@ -212,31 +234,31 @@ class BlotWidget
         #   \----------/
         #
         edgeSize = 100
-        padding = 5
-        cornerRadius = 20
+        padding = if padding then 10 else -10
+        cornerRadius = 35
 
         offsetX = field.x * edgeSize
         offsetY = field.y * edgeSize
         if mode == 'top'
             return [
-                offsetX + padding + cornerRadius, offsetY + padding,
-                offsetX + edgeSize - padding - cornerRadius, offsetY + padding,
+                {x: offsetX + padding + cornerRadius, y: offsetY + padding},
+                {x: offsetX + edgeSize - padding - cornerRadius, y: offsetY + padding},
             ]
         else if mode == 'right'
             return [
-                offsetX + edgeSize - padding, offsetY + padding + cornerRadius,
-                offsetX + edgeSize - padding, offsetY + edgeSize - padding - cornerRadius,
+                {x: offsetX + edgeSize - padding, y: offsetY + padding + cornerRadius},
+                {x: offsetX + edgeSize - padding, y: offsetY + edgeSize - padding - cornerRadius},
             ]
 
         else if mode == 'bottom'
             return [
-                offsetX + edgeSize - padding - cornerRadius, offsetY + edgeSize - padding,
-                offsetX + padding + cornerRadius, offsetY + edgeSize - padding,
+                {x: offsetX + edgeSize - padding - cornerRadius, y: offsetY + edgeSize - padding},
+                {x: offsetX + padding + cornerRadius, y: offsetY + edgeSize - padding},
             ]
         else if mode == 'left'
             return [
-                offsetX + padding, offsetY + edgeSize - padding - cornerRadius,
-                offsetX + padding, offsetY + padding + cornerRadius,
+                {x: offsetX + padding, y: offsetY + edgeSize - padding - cornerRadius},
+                {x: offsetX + padding, y: offsetY + padding + cornerRadius},
             ]
         else
             throw new Error "Incorrect mode #{mode}!"
@@ -270,49 +292,90 @@ class BlotWidget
         else
             throw new Error "Incorrect mode #{mode}!"
 
-    getBlotPoints: () ->
+    getBlotPoints: (blot, padding=true) ->
         # gets all points of blob
         blotIds = {}
-        for field in @blot
+        for field in blot
             blotIds[field.id] = field
 
         # starts from first field - it should be highest field (lowest x), so there
         # will not be field more to the top, so draw top edge and go next
-        field = @blot[0]
+        field = blot[0]
         mode = 'top'
-        points = @getEdge(field, mode)
+        points = @getEdge field, mode, padding
 
         # follow search of next edge of a blot until loop is closed
         foundNext = true
         while foundNext
             foundNext = false
             for [nextId, nextMode] in @getPossibleNextEdges field, mode
-                if nextId == @blot[0].id and nextMode == 'top'
+                if nextId == blot[0].id and nextMode == 'top'
                     # next edge is first edge - loop finished
+                    # points.push points[0]
                     return points
                 else if blotIds[nextId]?
                     field = blotIds[nextId]
                     mode = nextMode
-                    points.push.apply points, @getEdge(field, mode)
+                    points.push.apply points, @getEdge field, mode, padding
                     foundNext = true
                     break
             if not foundNext
                 # this shouldn't happen - one of next edge should be matched!
                 throw new Error "Broken blot!"
 
-    constructor: (@blot, @board) ->
+    constructor: (@blotId, @blots, @board) ->
+        # find all verticles of blot
+        outerPoints = @getBlotPoints(@blots[blotId])
+        innerPoints = []
 
-        points = @getBlotPoints()
+        # find which of other blots are inside
+        for blot, i in @blots
+            if i != @blotId
+                for point in @getBlotPoints blot
+                    if pointInPoly point, outerPoints
+                        points = @getBlotPoints blot, padding=false
+                        innerPoints.push points
+                        break
 
-        # create blob
-        @shape = new Kinetic.Line {
-            points: points,
-            fill: @colors[@blot[0].owner],
-            tension: 0.4,
-            strokeEnabled: false
-            lineCap: 'round'
-            closed: true
-        }
+        # draw polygon point by point - it's a set of lines and curves
+        drawPolygon = (points, context) ->
+            context.moveTo points[0].x, points[0].y
+            # append to the end copy of first element so path starts and ends in the same point
+            points.push points[0]
+            for point, i in points
+                if i > 0
+                    lastPoint = points[i-1]
+                    if lastPoint.x == point.x or lastPoint.y == point.y
+                        # if same x or same y than it's a normal line
+                        context.lineTo point.x, point.y
+                    else
+                        # calculate control point as a prolongation of last line
+                        # so it check it was horizontal or vertical line
+                        beforeLastPoint = points[i-2]
+                        if beforeLastPoint.y == lastPoint.y
+                            context.quadraticCurveTo point.x, lastPoint.y, point.x, point.y
+                        else if beforeLastPoint.x == lastPoint.x
+                            context.quadraticCurveTo lastPoint.x, point.y, point.x, point.y
+                        else
+                            throw new Error "Incorrect path!"
+
+        # create shape
+        @shape = new Kinetic.Shape
+            sceneFunc: (context) ->
+                # draw outside polygon - points are clockwise
+                context.beginPath()
+                drawPolygon outerPoints, context
+                context.closePath()
+
+                # draw inner polygons (holes) - points are counter-clockwise
+                for points in innerPoints
+                    points.reverse()
+                    drawPolygon points, context
+                    context.closePath()
+
+                context.fillStrokeShape @
+
+            fill: @colors[@blots[blotId][0].owner]
 
         @group = new Kinetic.Group
         @group.add @shape
@@ -326,17 +389,18 @@ class Renderer
     constructor: (@size, @board) ->
         @cavnasSize = Math.min(window.innerHeight, window.innerWidth) - 20
 
-        @stage = new Kinetic.Stage {
-            container: 'wrap',
-            width: @cavnasSize,
+        @stage = new Kinetic.Stage
+            container: 'wrap'
+            width: @cavnasSize
             height: @cavnasSize
-        }
 
         # field widgets are created by field constructor
         # blot widgets have to be created here
-        for blot in @board.getBlots()
-            blotWidget = new BlotWidget blot, @board
-            @blotWidgets.push blotWidget
+        blots = @board.getBlots()
+        for blot, blotId in blots
+            if blot[0].owner != EMPTY
+                blotWidget = new BlotWidget blotId, blots, @board
+                @blotWidgets.push blotWidget
 
         @refreshWidgets()
 
